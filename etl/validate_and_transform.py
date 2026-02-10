@@ -1,7 +1,13 @@
+import os
 import csv
 from datetime import datetime
 
 RAW_INPUT = "data/raw/transactions.csv"
+def ensure_input_exists(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"Raw input file not found: {path}"
+        )
 PROCESSED_OUTPUT = "data/processed/transactions_clean.csv"
 
 REQUIRED_FIELDS = [
@@ -52,6 +58,7 @@ def transform_record(record):
 
 
 def process_transactions():
+    ensure_input_exists(RAW_INPUT)
     valid_records = []
     rejected_records = []
 
@@ -67,6 +74,8 @@ def process_transactions():
                 valid_records.append(transform_record(record))
             else:
                 rejected_records.append(record)
+
+    print("Starting pipeline run (idempotent mode)")
 
     # Write clean data
     with open(PROCESSED_OUTPUT, "w", newline="") as outfile:
