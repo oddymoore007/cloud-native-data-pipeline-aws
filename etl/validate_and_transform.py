@@ -1,6 +1,7 @@
+import datetime
 import os
 import csv
-from datetime import datetime
+
 
 RAW_INPUT = "data/raw/transactions.csv"
 def ensure_input_exists(path):
@@ -8,7 +9,8 @@ def ensure_input_exists(path):
         raise FileNotFoundError(
             f"Raw input file not found: {path}"
         )
-PROCESSED_OUTPUT = "data/processed/transactions_clean.csv"
+    
+
 
 REQUIRED_FIELDS = [
     "transaction_id",
@@ -31,7 +33,7 @@ def is_valid_record(record):
                 return False
 
         # Validate timestamp
-        datetime.fromisoformat(record["timestamp"])
+        datetime.datetime.fromisoformat(record["timestamp"])
 
         # Validate amount
         amount = float(record["amount"])
@@ -59,9 +61,9 @@ def transform_record(record):
 
 def process_transactions():
     ensure_input_exists(RAW_INPUT)
+
     valid_records = []
     rejected_records = []
-
     total_records = 0
 
     with open(RAW_INPUT, newline="") as infile:
@@ -77,18 +79,28 @@ def process_transactions():
 
     print("Starting pipeline run (idempotent mode)")
 
+    # Partitioned output
+    today = datetime.date.today()
+    processed_output_dir = f"data/processed/date={today}/"
+
+    # Ensure directory exists
+    os.makedirs(processed_output_dir, exist_ok=True)
+
     # Write clean data
-    with open(PROCESSED_OUTPUT, "w", newline="") as outfile:
+    clean_output = processed_output_dir + "transactions_clean.csv"
+    with open(clean_output, "w", newline="") as outfile:
         writer = csv.DictWriter(outfile, fieldnames=REQUIRED_FIELDS)
         writer.writeheader()
         writer.writerows(valid_records)
 
     # Write rejected data
-    rejected_output = "data/processed/transactions_rejected.csv"
+    rejected_output = processed_output_dir + "transactions_rejected.csv"
+
     if rejected_records:
         with open(rejected_output, "w", newline="") as badfile:
             writer = csv.DictWriter(
-                badfile, fieldnames=rejected_records[0].keys()
+                badfile,
+                fieldnames=rejected_records[0].keys()
             )
             writer.writeheader()
             writer.writerows(rejected_records)
@@ -102,7 +114,6 @@ def process_transactions():
 
     if rejected_records:
         print(f"Rejected records saved to: {rejected_output}")
-
 
 if __name__ == "__main__":
     process_transactions()
