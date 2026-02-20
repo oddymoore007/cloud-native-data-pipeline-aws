@@ -1,15 +1,13 @@
 import datetime
 import os
 import csv
+import boto3
+import logging
+import argparse
 
 
 RAW_INPUT = "data/raw/transactions.csv"
-def ensure_input_exists(path):
-    if not os.path.exists(path):
-        raise FileNotFoundError(
-            f"Raw input file not found: {path}"
-        )
-    
+
 
 
 REQUIRED_FIELDS = [
@@ -23,7 +21,42 @@ REQUIRED_FIELDS = [
     "country",
 ]
 
+# Cloud configuration
+UPLOAD_TO_S3 = os.getenv("UPLOAD_TO_S3", "false").lower() == "true"
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+S3_PREFIX = os.getenv("S3_PREFIX", "transactions")
 
+
+## Helper function
+def ensure_input_exists(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"Raw input file not found: {path}"
+        )
+    
+def upload_directory_to_s3(local_dir, bucket, prefix):
+    """
+    Upload all files in a directory to S3,
+    preserving partition structure and normalizing path separators.
+    """
+    s3 = boto3.client("s3")
+
+    base_dir = "data/processed"
+
+    for root, dirs, files in os.walk(local_dir):
+        for file in files:
+            local_path = os.path.join(root, file)
+
+            relative_path = os.path.relpath(local_path, base_dir)
+
+            # Normalize Windows backslashes to S3 forward slashes
+            relative_path = relative_path.replace("\\", "/")
+
+            s3_key = f"{prefix}/{relative_path}"
+
+            print(f"Uploading {local_path} → s3://{bucket}/{s3_key}")
+            s3.upload_file(local_path, bucket, s3_key)
+            
 def is_valid_record(record):
     """Basic validation rules for raw transactions."""
     try:
@@ -45,6 +78,8 @@ def is_valid_record(record):
         return False
 
 
+
+
 def transform_record(record):
     """Transform raw record into clean, standardised format."""
     return {
@@ -57,6 +92,26 @@ def transform_record(record):
         "category": record["category"].title(),
         "country": record["country"].upper(),
     }
+
+def aggregate_transactions(valid_records):
+    daily_totals = {}
+    daily_counts = {}
+
+    for record in valid_records:
+        account_id = record["account_id"]
+        amount = record["amount"]
+        date = record["timestamp"].split("T")[0]
+
+        key = f"{account_id}_{date}"
+
+        if key not in daily_totals:
+            daily_totals[key] = 0
+            daily_counts[key] = 0
+
+        daily_totals[key] += amount
+        daily_counts[key] += 1
+
+    return daily_totals, daily_counts
 
 
 def process_transactions():
@@ -105,6 +160,21 @@ def process_transactions():
             writer.writeheader()
             writer.writerows(rejected_records)
 
+       # Aggregate daily totals
+    daily_totals, daily_counts = aggregate_transactions(valid_records)
+
+    daily_output = processed_output_dir + "daily_totals.csv"
+
+    with open(daily_output, "w", newline="") as dailyfile:
+        writer = csv.writer(dailyfile)
+        writer.writerow(["account_id", "date", "total_amount", "transaction_count"])
+
+        for key in daily_totals:
+            account_id, date = key.split("_")
+            writer.writerow([account_id, date, daily_totals[key], daily_counts[key]])
+
+    print(f"Daily totals written to: {daily_output}")        
+
     # Emit metrics
     print("Pipeline run metrics")
     print("--------------------")
@@ -114,6 +184,14 @@ def process_transactions():
 
     if rejected_records:
         print(f"Rejected records saved to: {rejected_output}")
+    
+    if UPLOAD_TO_S3:
+        print("Uploading partition to S3...")
+        upload_directory_to_s3(
+            processed_output_dir,
+            S3_BUCKET_NAME,
+            S3_PREFIX
+        )
 
 if __name__ == "__main__":
     process_transactions()

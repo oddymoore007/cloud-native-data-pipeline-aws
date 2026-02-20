@@ -1,10 +1,21 @@
-# Data Pipeline on AWS
+# Cloud-Native Transaction Data Pipeline (AWS)
 
-This project demonstrates a cloud-based data ingestion and analytics pipeline.
+This project implements a cloud-native data pipeline that ingests, validates, transforms, aggregates, and uploads transactional data to Amazon S3 using a partitioned data lake structure.
 
-## Day 1 – Raw Data Ingestion
-- Generated synthetic transaction data using Python
-- Established project structure following data engineering best practices
-- Created a raw data landing zone for ingestion
+It is designed to simulate production-grade data engineering patterns, including:
 
-Further stages will include transformation, analytics, and cloud deployment.
+Idempotent pipeline execution
+
+Schema validation and data quality controls
+
+Clean vs rejected record handling
+
+Date-based partitioning (data lake layout)
+
+Daily aggregation layer
+
+Environment-driven configuration
+
+S3 integration with preserved partition structure
+
+The project demonstrates both data engineering and cloud engineering principles.
